@@ -1,5 +1,32 @@
-<html>
-  <h1>KTV</h1>
- <a href="https://golivesid.github.io/dashPlayer/" class="site-card">
-              <img src="https://i.ibb.co/qpmPhFw/images-2.jpg" alt="TLC">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JW Player with DRM</title>
+    <script src="https://content.jwplatform.com/libraries/SAHhwvZq.js"></script>
+</head>
+<body>
+    <div id="jwplayerDiv"></div>
+    
+    <script>
+        // Fetch the DRM keys from the JSON file
+        fetch('drmKeys.json')
+            .then(response => response.json())
+            .then(data => {
+                // Set up JW Player with the fetched keys
+                jwplayer("jwplayerDiv").setup({
+                    file: "https://delta12tatasky.akamaized.net/out/i/22.mpd",
+                    type: "dash",
+                    drm: {
+                        "clearkey": {
+                            "keyId": data.keyId,
+                            "key": data.key
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('Error fetching DRM keys:', error));
+    </script>
+</body>
 </html>
