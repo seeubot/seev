@@ -8,30 +8,10 @@
 </head>
 <body>
         <div id="jwplayerDiv"></div>
- <script>
-        // Fetch the DRM keys from the JSON file
-        fetch('drmKeys.json')
-            .then(response => response.json())
-            .then(data => {
-                // Set up JW Player with the fetched keys
-                jwplayer("jwplayerDiv").setup({
-                    file: "https://delta12tatasky.akamaized.net/out/i/22.mpd",
-                    type: "dash",
-                    drm: {
-                        "clearkey": {
-                            "keyId": data.keyId,
-                            "key": data.key
-                        }
-                    }
-                });
-            })
-            .catch(error => console.error('Error fetching DRM keys:', error));
-    </script>
-    <script>
-  if(confirm("Join Our Telegram Channel")) { window.location.href = "https://t.me/+qdLjzK5bWoViOWQ1" }
-    </script>
 
-    <script>
+    
+ <script>
+     
     // disable right click
     document.addEventListener('contextmenu', event => event.preventDefault());
 
@@ -58,8 +38,29 @@
         }
     }
 
-</script>
 
+
+        // Fetch the DRM keys from the JSON file
+        fetch('drmKeys.json')
+            .then(response => response.json())
+            .then(data => {
+                // Set up JW Player with the fetched keys
+                jwplayer("jwplayerDiv").setup({
+                    file: "https://delta12tatasky.akamaized.net/out/i/22.mpd",
+                    type: "dash",
+                    drm: {
+                        "clearkey": {
+                            "keyId": data.keyId,
+                            "key": data.key
+                        }
+                    }
+                });
+            })
+            .catch(error => console.error('Error fetching DRM keys:', error));
+    </script>
+    <script>
+  if(confirm("Join Our Telegram Channel")) { window.location.href = "https://t.me/+qdLjzK5bWoViOWQ1" }
+    </script>
 </body>
 
     
