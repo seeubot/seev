@@ -1,27 +1,26 @@
 /**
- * DevBlocker - Script to protect streams by blocking developer tools access
- * This script should be included in the ExoPlayer Web Interface
+ * Enhanced DevBlocker - Script to protect streams by blocking developer tools access
+ * This script will close or redirect the window when developer tools are detected
  */
 (function() {
   // Configuration
   const config = {
     debugMode: false,                   // Set to true to show console logs
-    redirectOnDevTools: false,          // Whether to redirect when devtools detected
+    forceCloseWindow: true,             // Close the window when devtools detected
+    redirectOnDevTools: true,           // Whether to redirect when devtools detected
     redirectUrl: 'about:blank',         // URL to redirect to if developer tools detected 
-    showWarningMessage: true,           // Show warning when developer tools opened
-    warningTitle: 'Developer Tools Detected',
-    warningMessage: 'For security reasons, developer tools access is restricted.',
-    preventRightClick: true,            // Prevent right click context menu
-    preventF12: true,                   // Prevent F12 key for dev tools
-    preventCopy: true,                  // Prevent copy/cut commands
-    monitorFrequency: 1000,             // How often to check for dev tools (ms)
-    maximumWarnings: 3                  // Max warnings before taking action
+    blockViewSource: true,              // Block view-source attempts
+    blockInspectElement: true,          // Block inspect element attempts
+    monitorFrequency: 500,              // How often to check for dev tools (ms)
+    maxWarningBeforeAction: 1,          // Max warnings before taking action
+    preventUrlLeakage: true,            // Protect video URLs from being easily accessed
+    useStrictCSP: true                  // Use strict Content Security Policy
   };
   
   // Variables
   let isDevToolsOpen = false;
   let warningCount = 0;
-  let originalTitle = document.title;
+  let lastAction = 0;
   
   // Debug logging function
   function log(message) {
@@ -32,70 +31,138 @@
   
   // Initialize blocker
   function init() {
-    log('Initializing Developer Tools Blocker');
+    log('Initializing Enhanced Developer Tools Blocker');
     
-    // Attach event listeners
-    if (config.preventRightClick) {
-      document.addEventListener('contextmenu', handleContextMenu);
+    // Apply Content Security Policy if enabled
+    if (config.useStrictCSP) {
+      applyCSP();
     }
     
-    if (config.preventF12) {
-      document.addEventListener('keydown', handleKeyDown);
+    // Prevent view-source protocol
+    if (config.blockViewSource) {
+      blockViewSourceProtocol();
     }
     
-    if (config.preventCopy) {
-      document.addEventListener('copy', handleCopyEvent);
-      document.addEventListener('cut', handleCopyEvent);
-    }
+    // Block context menu and keyboard shortcuts
+    attachEventListeners();
     
     // Start detection methods
     startDevToolsDetection();
+    
+    // Clean URL bar and history
+    cleanUrlHistory();
+    
+    // Protect video elements
+    protectVideoElements();
+    
+    // Add protection against iframe inspection
+    protectAgainstFrames();
   }
   
-  // Block right-click context menu
-  function handleContextMenu(e) {
-    e.preventDefault();
-    return false;
-  }
-  
-  // Block F12 and other dev tool keyboard shortcuts
-  function handleKeyDown(e) {
-    // Block F12
-    if (e.key === 'F12' || e.keyCode === 123) {
-      e.preventDefault();
-      warnUser();
-      return false;
-    }
-    
-    // Block Ctrl+Shift+I/J/C/K (Chrome/Firefox dev tools)
-    if (e.ctrlKey && e.shiftKey && (
-      e.key === 'I' || e.key === 'i' || 
-      e.key === 'J' || e.key === 'j' ||
-      e.key === 'C' || e.key === 'c' ||
-      e.key === 'K' || e.key === 'k'
-    )) {
-      e.preventDefault();
-      warnUser();
-      return false;
-    }
-    
-    // Block Ctrl+U (view source)
-    if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) {
-      e.preventDefault();
-      warnUser();
-      return false;
+  // Apply strict Content Security Policy
+  function applyCSP() {
+    try {
+      const meta = document.createElement('meta');
+      meta.httpEquiv = 'Content-Security-Policy';
+      meta.content = "default-src 'self' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline';";
+      document.head.appendChild(meta);
+    } catch (e) {
+      log('CSP application failed: ' + e);
     }
   }
   
-  // Block copy/cut events
-  function handleCopyEvent(e) {
-    // Allow copy in input fields and textareas
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-      return true;
+  // Block view-source protocol
+  function blockViewSourceProtocol() {
+    if (window.location.protocol === 'view-source:') {
+      window.location.href = config.redirectUrl;
     }
+  }
+  
+  // Clean URL bar and history
+  function cleanUrlHistory() {
+    try {
+      // Replace current URL without query parameters
+      if (window.location.search) {
+        const cleanUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    } catch (e) {
+      log('History cleaning failed: ' + e);
+    }
+  }
+  
+  // Attach all event listeners
+  function attachEventListeners() {
+    // Block right-click
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      takeActionOnAttempt();
+      return false;
+    });
     
-    e.preventDefault();
-    return false;
+    // Block keyboard shortcuts
+    document.addEventListener('keydown', function(e) {
+      // Block F12
+      if (e.key === 'F12' || e.keyCode === 123) {
+        e.preventDefault();
+        takeActionOnAttempt();
+        return false;
+      }
+      
+      // Block Ctrl+Shift+I/J/C/K (Chrome/Firefox dev tools)
+      if (e.ctrlKey && e.shiftKey && (
+        e.key === 'I' || e.key === 'i' || 
+        e.key === 'J' || e.key === 'j' ||
+        e.key === 'C' || e.key === 'c' ||
+        e.key === 'K' || e.key === 'k'
+      )) {
+        e.preventDefault();
+        takeActionOnAttempt();
+        return false;
+      }
+      
+      // Block Ctrl+U (view source)
+      if (e.ctrlKey && (e.key === 'U' || e.key === 'u')) {
+        e.preventDefault();
+        takeActionOnAttempt();
+        return false;
+      }
+      
+      // Block Ctrl+S (save page)
+      if (e.ctrlKey && (e.key === 'S' || e.key === 's')) {
+        e.preventDefault();
+        return false;
+      }
+    });
+    
+    // Block copy/cut/paste events
+    ['copy', 'cut', 'paste'].forEach(function(event) {
+      document.addEventListener(event, function(e) {
+        // Allow in input fields and textareas
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+          return true;
+        }
+        
+        e.preventDefault();
+        return false;
+      });
+    });
+    
+    // Catch unload to check if it's devtools related
+    window.addEventListener('beforeunload', function(e) {
+      if (isDevToolsOpen) {
+        // If devtools are open during unload, do something
+        localStorage.setItem('_devtools_detected', 'true');
+      }
+    });
+    
+    // Check on load if previous session had devtools
+    window.addEventListener('load', function() {
+      if (localStorage.getItem('_devtools_detected') === 'true') {
+        localStorage.removeItem('_devtools_detected');
+        // Could implement some additional protection here
+      }
+    });
   }
   
   // Check for dev tools using various methods
@@ -105,64 +172,70 @@
       const widthThreshold = window.outerWidth - window.innerWidth > 160;
       const heightThreshold = window.outerHeight - window.innerHeight > 160;
       
-      // macOS Chrome/Firefox usually has width difference
-      // Windows usually has height difference
       if (widthThreshold || heightThreshold) {
         return true;
       }
       return false;
     }
     
-    // Method 2: Firebug detection
-    function checkFirebug() {
-      if (window.console && (window.console.firebug || window.console.table && /firebug/i.test(window.console.table.toString()))) {
-        return true;
-      }
-      return false;
-    }
-    
-    // Method 3: Debug detection
-    const element = document.createElement('div');
-    Object.defineProperty(element, 'id', {
-      get: function() {
-        isDevToolsOpen = true;
-        return 'devtools-detector';
-      }
-    });
-    
-    // Method 4: Console timing detection
-    let devToolsTimeout;
-    function checkConsoleTimings() {
-      const startTime = new Date();
-      console.profile('DevToolsDetector');
-      console.profileEnd('DevToolsDetector');
-      const endTime = new Date();
+    // Method 2: Debugger detection
+    function checkDebugger() {
+      let devtoolsOpen = false;
       
-      if (endTime - startTime > 100) {
-        return true;
-      }
-      return false;
-    }
-    
-    // Combined check function
-    function checkDevTools() {
-      // Don't try to use console.clear as it can be suspicious
+      // Define a getter
+      const element = new Image();
+      Object.defineProperty(element, 'id', {
+        get: function() {
+          devtoolsOpen = true;
+          return 'detector';
+        }
+      });
       
+      // Try to trigger the getter
       try {
         console.log(element);
         console.clear();
       } catch (e) {}
       
-      let detected = isDevToolsOpen || 
-                     checkDevToolsSize() || 
-                     checkFirebug();
+      return devtoolsOpen;
+    }
+    
+    // Method 3: DevTools orientation detection
+    function checkDevToolsOrientation() {
+      // Usually, devtools causes either width or height to change dramatically
+      const orientation = window.innerHeight > window.innerWidth ? 'portrait' : 'landscape';
       
-      // Only use console timing check occasionally as it's more noticeable
-      if (!detected && Math.random() > 0.8) {
-        detected = checkConsoleTimings();
+      if (!window._lastOrientation) {
+        window._lastOrientation = orientation;
+      } else if (window._lastOrientation !== orientation) {
+        window._lastOrientation = orientation;
+        // Sudden orientation change might be devtools
+        return window.innerWidth < 750;
       }
       
-      // Take action if detected
+      return false;
+    }
+    
+    // Method 4: Date execution timing
+    function checkExecutionTime() {
+      const start = new Date();
+      debugger; // This statement gets triggered if devtools is open
+      const end = new Date();
+      const diff = end.getTime() - start.getTime();
+      
+      return diff > 100; // If execution took longer than 100ms, likely devtools is open
+    }
+    
+    // Combined check function
+    function checkDevTools() {
+      // Run our detection methods
+      const detected = 
+        checkDevToolsSize() || 
+        checkDebugger() || 
+        checkDevToolsOrientation() || 
+        (Math.random() > 0.9 && checkExecutionTime()); // Only check execution time occasionally
+      
+      // If detected, take action
       if (detected) {
         if (!isDevToolsOpen) {
           log('Developer tools detected');
@@ -172,7 +245,6 @@
       } else if (isDevToolsOpen) {
         log('Developer tools closed');
         isDevToolsOpen = false;
-        handleDevToolsClosed();
       }
     }
     
@@ -182,140 +254,219 @@
   
   // When dev tools detected as open
   function handleDevToolsOpen() {
-    if (config.showWarningMessage) {
-      warnUser();
+    warningCount++;
+    
+    // Protect video element immediately
+    protectVideoElements();
+    
+    // Take action based on warning count
+    if (warningCount >= config.maxWarningBeforeAction) {
+      takeActionOnDevTools();
     }
+  }
+  
+  // Take action when devtools detected
+  function takeActionOnDevTools() {
+    // Check if we've acted recently to prevent infinite loops
+    const now = new Date().getTime();
+    if (now - lastAction < 1000) {
+      return;
+    }
+    lastAction = now;
     
-    // Set warning title
-    document.title = config.warningTitle;
-    
-    // Protect video element and player
-    protectVideoElement();
-    
-    // Redirect if configured
-    if (config.redirectOnDevTools && warningCount >= config.maximumWarnings) {
+    // Close the window
+    if (config.forceCloseWindow) {
+      // First, destroy the UI
+      destroyUI();
+      
+      // Try multiple methods to close the window
+      try {
+        window.close();
+      } catch (e) {}
+      
+      // If window.close() is prevented, try alternative methods
+      if (config.redirectOnDevTools) {
+        window.location.href = config.redirectUrl;
+      } else {
+        // If can't redirect, at least clear the page
+        document.body.innerHTML = '';
+        document.title = 'Access Denied';
+      }
+    } 
+    // Or just redirect
+    else if (config.redirectOnDevTools) {
       window.location.href = config.redirectUrl;
     }
   }
   
-  // When dev tools detected as closed
-  function handleDevToolsClosed() {
-    document.title = originalTitle;
-  }
-  
-  // Display warning to user
-  function warnUser() {
+  // Take action when an attempt to access dev tools is detected
+  function takeActionOnAttempt() {
     warningCount++;
     
-    if (warningCount <= config.maximumWarnings) {
-      if (config.showWarningMessage) {
-        alert(config.warningMessage);
-      }
-    }
-    
-    if (warningCount === config.maximumWarnings) {
-      // Additional protection when max warnings reached
-      obfuscatePlayer();
+    // Immediate action on direct attempt
+    if (warningCount >= config.maxWarningBeforeAction) {
+      takeActionOnDevTools();
     }
   }
   
-  // Protect video element by cleaning up source references
-  function protectVideoElement() {
+  // Destroy UI to make the content inaccessible
+  function destroyUI() {
     try {
-      const videoElements = document.getElementsByTagName('video');
+      // Remove all sources from video elements
+      const videos = document.getElementsByTagName('video');
+      for (let i = 0; i < videos.length; i++) {
+        videos[i].src = '';
+        videos[i].load();
+      }
       
-      for (let i = 0; i < videoElements.length; i++) {
-        const video = videoElements[i];
+      // Clear the page content
+      const container = document.querySelector('.container');
+      if (container) {
+        container.style.display = 'none';
+      }
+    } catch (e) {
+      log('Error destroying UI: ' + e);
+    }
+  }
+  
+  // Protect video elements
+  function protectVideoElements() {
+    try {
+      const videos = document.getElementsByTagName('video');
+      
+      for (let i = 0; i < videos.length; i++) {
+        const video = videos[i];
         
-        // Create a wrapper for the video info
+        // Store current state
         const videoInfo = {
-          source: video.src,
+          src: video.src,
           currentTime: video.currentTime,
-          paused: video.paused
+          playing: !video.paused
         };
         
-        // Store info in an obfuscated variable
-        window['_' + Math.random().toString(36).substr(2, 9)] = videoInfo;
+        // Store in obfuscated property
+        const propName = '_v' + Math.random().toString(36).substring(2);
+        window[propName] = videoInfo;
         
-        // Clear visible source
-        if (video.src && video.src.length > 0) {
-          // Only clear visible source if we're sure we stored the info
-          video.removeAttribute('src');
-          video.load();
+        // Override the source getter
+        if (config.preventUrlLeakage && video.src) {
+          // Only if we haven't already protected it
+          if (!video.hasAttribute('data-protected')) {
+            const originalSrc = video.src;
+            
+            // Create a special reference that's harder to find
+            Object.defineProperty(video, '_srcRef', {
+              value: originalSrc,
+              writable: false,
+              configurable: false,
+              enumerable: false
+            });
+            
+            // Add marker that we've protected this video
+            video.setAttribute('data-protected', 'true');
+            
+            // Override the src property if possible
+            try {
+              Object.defineProperty(video, 'src', {
+                get: function() {
+                  // Return empty or fake URL when inspected
+                  if (isDevToolsOpen) {
+                    return '';
+                  }
+                  return originalSrc;
+                },
+                set: function(newSrc) {
+                  // Allow legitimate source changes
+                  if (newSrc && typeof newSrc === 'string') {
+                    Object.defineProperty(this, '_srcRef', {
+                      value: newSrc,
+                      writable: false,
+                      configurable: false,
+                      enumerable: false
+                    });
+                  }
+                  this.setAttribute('src', newSrc);
+                },
+                configurable: false
+              });
+            } catch (e) {
+              log('Error protecting video src: ' + e);
+            }
+          }
+        }
+      }
+      
+      // Also protect the URL input that might contain the stream URL
+      const urlInput = document.getElementById('url-input');
+      if (urlInput && urlInput.value && !urlInput.hasAttribute('data-protected')) {
+        const originalValue = urlInput.value;
+        
+        // Store real value in hidden property
+        Object.defineProperty(urlInput, '_valueRef', {
+          value: originalValue,
+          writable: true,
+          configurable: false,
+          enumerable: false
+        });
+        
+        // Mark as protected
+        urlInput.setAttribute('data-protected', 'true');
+        
+        // Override value property
+        try {
+          const originalValueDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+          
+          Object.defineProperty(urlInput, 'value', {
+            get: function() {
+              if (isDevToolsOpen) {
+                return 'Protected content';
+              }
+              return this._valueRef || originalValueDesc.get.call(this);
+            },
+            set: function(newValue) {
+              this._valueRef = newValue;
+              originalValueDesc.set.call(this, newValue);
+            },
+            configurable: false
+          });
+        } catch (e) {
+          log('Error protecting URL input: ' + e);
         }
       }
     } catch (e) {
-      log('Error protecting video: ' + e);
+      log('Error in video protection: ' + e);
     }
   }
   
-  // Obfuscate player when max warnings reached
-  function obfuscatePlayer() {
+  // Protection against being loaded in frames for inspection
+  function protectAgainstFrames() {
+    // Prevent framing
     try {
-      // Make video element more difficult to inspect
-      const playerContainer = document.querySelector('.player-container');
-      if (playerContainer) {
-        playerContainer.style.opacity = '0.1';
+      // Ensure we're the top frame
+      if (window.self !== window.top) {
+        window.top.location = window.self.location;
       }
       
-      // Mess up player interface to discourage further attempts
-      const controls = document.getElementById('player-controls');
-      if (controls) {
-        controls.style.display = 'none';
-      }
+      // Add frame-breaking headers
+      const frameBreaker = document.createElement('meta');
+      frameBreaker.httpEquiv = 'X-Frame-Options';
+      frameBreaker.content = 'DENY';
+      document.head.appendChild(frameBreaker);
     } catch (e) {
-      log('Error obfuscating player: ' + e);
+      // If we can't access top, we're likely in a cross-origin frame
+      // Try to break out or redirect
+      try {
+        window.location = config.redirectUrl;
+      } catch (innerE) {
+        log('Frame protection error: ' + innerE);
+      }
     }
   }
   
-  // Disable all known dev tools browser extensions
-  function disableDevToolsExtensions() {
-    // Attempt to disable React, Redux devtools
-    try {
-      window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = { isDisabled: true };
-      window.__REDUX_DEVTOOLS_EXTENSION__ = undefined;
-    } catch (e) {}
-  }
-  
-  // Additional protection measures for stream URLs
-  function protectStreamUrls() {
-    // Override the URL setter in HTMLMediaElement prototype
-    try {
-      const originalSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src');
-      
-      if (originalSrcDescriptor && originalSrcDescriptor.configurable) {
-        Object.defineProperty(HTMLMediaElement.prototype, 'src', {
-          get: originalSrcDescriptor.get,
-          set: function(url) {
-            // Do something with the URL before setting it
-            const obfuscatedUrl = url;
-            log('Media source set: [PROTECTED]');
-            
-            // Store original url in a harder to access form
-            this._sourceRef = {
-              v: btoa(url.split('').reverse().join(''))
-            };
-            
-            // Call the original setter with the URL
-            originalSrcDescriptor.set.call(this, obfuscatedUrl);
-          },
-          configurable: false,
-          enumerable: true
-        });
-      }
-    } catch (e) {
-      log('Error protecting URL setter: ' + e);
-    }
-  }
-  
-  // Initialize when page is loaded
+  // Initialize everything when the DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-  
-  // Apply additional protections
-  disableDevToolsExtensions();
-  protectStreamUrls();
 })();
